@@ -1,0 +1,209 @@
+desc: MySynth
+tags: instrument
+
+slider1:-0<-120, 6, 1>Volume
+slider4:attack=0.05<0.01, 5, 0.01>Attack
+slider5:decay=1<0.01, 30, 0.01>Decay
+slider6:sustain=1<0, 1, 0.01>Sustain
+slider7:release=0.05<0.01, 5, 0.01>Release
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+
+//Constants
+SEMITONE = 2 ^ (1/12);
+POLYPHONY = 8;
+STEP = 1 / srate;
+
+// arrays
+ARRAY_SIZE_COUNTER = 0;
+
+//Size 128. Stores the index of each MIDI note if played.
+Notes = ARRAY_SIZE_COUNTER;
+ARRAY_SIZE_COUNTER += 128;
+
+// Size 128. Stores the precalculated frequency of each note
+Freqs = ARRAY_SIZE_COUNTER;
+ARRAY_SIZE_COUNTER += 128;
+
+ // Size POLYPHONY. Stores the MIDI value of each played note.
+PlayedNotes = ARRAY_SIZE_COUNTER;
+ARRAY_SIZE_COUNTER += POLYPHONY;
+
+// Size POLYPHONY. Stores if each slot is off, (0), in attack (1), decay (2), sustain (3), release (4)
+State = ARRAY_SIZE_COUNTER;
+ARRAY_SIZE_COUNTER += POLYPHONY;
+
+// Size POLYPHONY.  keeps track of the current loudness of each note.
+Envelopes = ARRAY_SIZE_COUNTER;
+ARRAY_SIZE_COUNTER += POLYPHONY;
+
+// state
+current_time = 0;
+
+
+//FUNCTIONS
+
+function R(t)
+(
+	out = 0;
+	t <= release ? (
+		out = 1 - (t/release);
+	);
+	out;
+);
+
+function Note_Remove(i)
+(
+	//Notes[PlayedNotes[i]] = -1;
+	PlayedNotes[i] = -1;
+	Envelopes[i] = 0;
+	State[i] = 0;
+);
+
+function Get_New_Note_Index(n)
+(
+	i = 0;
+	quietest = 2;
+	bestIndex = 0;
+	loop(POLYPHONY,
+		v = Envelopes[i];
+		PlayedNotes[i] == n ? (
+			v -= 6;
+		);
+		State[i] == 0 ? (
+			v -= 4;
+		);
+		State[i] == 4 ? (
+			v -= 2;
+		);
+		v < quietest ? (
+			quietest = v;
+			bestIndex = i;
+		);
+		i += 1;
+	);
+	
+	bestIndex;
+);
+	
+
+function Note_On(n, v) 
+(
+	i = Get_New_Note_Index(n);
+	
+	Note_Remove(i);
+	
+	Notes[n] = i;
+	PlayedNotes[i] = n;
+	Envelopes[i] = 0;
+	State[i] = 1;
+);
+
+function Note_Off(n)
+(
+	Notes[n] >= 0 ? (
+		i = Notes[n];
+		State[i] = 4;
+	); 
+);
+
+function Update_Envelope(i, dt)
+(
+	s = State[i];
+	s == 1 ? (
+		Envelopes[i] += dt / attack;
+		Envelopes[i] >= 1 ? (
+			Envelopes[i] = 1;
+			State[i] = 2;
+		);
+	);
+		
+	s == 2 ? (
+		Envelopes[i] -= dt / decay;
+		Envelopes[i] <= sustain ? (
+			Envelopes[i] = sustain;
+			State[i] = 3;
+		);
+	);    
+	s == 4 ? (
+		Envelopes[i] -= dt / release;
+		Envelopes[i] <= 0 ? (
+			Note_Remove(i);
+		);
+	);
+	
+);
+
+function Wave(i, t)
+(
+	t = Freqs[PlayedNotes[i]] * t;
+	t = t - floor(t) - 0.5;
+);
+
+i = 0;
+loop(128,
+	Freqs[i] = 440 * (SEMITONE ^(i - 69));
+	i += 1;
+);
+
+
+
+@slider
+vol = 2^(slider1/6);
+
+@block
+
+// gets the midi messages
+while(midirecv(offset, msg1, msg2, msg3)) (
+	isNoteMessage = (msg1 >= 0x80) & (msg1 < 0xA0); // check if the midi message is a note on/off message
+	isNoteMessage ? (
+		note = msg2;
+		on = msg1 & 16;
+		
+		// if it is a note message, use it!
+		on ? (
+			Note_On(note, msg3);
+		) : (
+			Note_Off(note);
+		);
+	) : (
+		midisend(offset, msg1, msg2, msg3); // otherwise pass the message through
+	);
+);
+
+
+
+// tick the envelopes
+i = 0;
+loop(POLYPHONY,
+	OnOff[i] >= 0 ? (
+		Update_Envelope(i, samplesblock * step);
+	);
+	i += 1;
+);
+
+
+@sample
+i = 0;
+// add the saw waves together
+loop(POLYPHONY,
+	OnOff[i] >= 0 ? (
+		spl0 += Wave(i, current_time) * Envelopes[i];
+	);
+	i += 1;
+);
+
+spl0 *= vol;
+spl1 = spl0;
+current_time += STEP;
+	
+
+
+
+
+
