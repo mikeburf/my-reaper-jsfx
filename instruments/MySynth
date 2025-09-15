@@ -48,15 +48,6 @@ current_time = 0;
 
 //FUNCTIONS
 
-function R(t)
-(
-	out = 0;
-	t <= release ? (
-		out = 1 - (t/release);
-	);
-	out;
-);
-
 function Note_Remove(i)
 (
 	//Notes[PlayedNotes[i]] = -1;
