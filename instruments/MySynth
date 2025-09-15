@@ -48,6 +48,7 @@ current_time = 0;
 
 //FUNCTIONS
 
+// removes a note from a slot
 function Note_Remove(i)
 (
 	//Notes[PlayedNotes[i]] = -1;
@@ -56,6 +57,7 @@ function Note_Remove(i)
 	State[i] = 0;
 );
 
+// gets the best slot for a new note to be added to
 function Get_New_Note_Index(n)
 (
 	i = 0;
@@ -64,13 +66,13 @@ function Get_New_Note_Index(n)
 	loop(POLYPHONY,
 		v = Envelopes[i];
 		PlayedNotes[i] == n ? (
-			v -= 6;
+			v -= 6; // prioritize slots that are already playing the same note
 		);
 		State[i] == 0 ? (
-			v -= 4;
+			v -= 4; // prioritize slots that are off
 		);
 		State[i] == 4 ? (
-			v -= 2;
+			v -= 2; // prioritize slots that are being released
 		);
 		v < quietest ? (
 			quietest = v;
@@ -82,7 +84,7 @@ function Get_New_Note_Index(n)
 	bestIndex;
 );
 	
-
+// adds a note to a lot to be played
 function Note_On(n, v) 
 (
 	i = Get_New_Note_Index(n);
@@ -95,6 +97,7 @@ function Note_On(n, v)
 	State[i] = 1;
 );
 
+// starts the release of a playing note
 function Note_Off(n)
 (
 	Notes[n] >= 0 ? (
@@ -103,6 +106,7 @@ function Note_Off(n)
 	); 
 );
 
+// updates the loudness of a note based on its current state
 function Update_Envelope(i, dt)
 (
 	s = State[i];
@@ -130,12 +134,15 @@ function Update_Envelope(i, dt)
 	
 );
 
+// calculates the played wave at slot i, given the current time.
+// currently using a saw wave
 function Wave(i, t)
 (
 	t = Freqs[PlayedNotes[i]] * t;
 	t = t - floor(t) - 0.5;
 );
 
+// at initialization, calculate the frequency lookup table.
 i = 0;
 loop(128,
 	Freqs[i] = 440 * (SEMITONE ^(i - 69));
@@ -145,7 +152,7 @@ loop(128,
 
 
 @slider
-vol = 2^(slider1/6);
+vol = 2^(slider1/6); // convert from dB to amplitude
 
 @block
 
@@ -181,7 +188,8 @@ loop(POLYPHONY,
 
 @sample
 i = 0;
-// add the saw waves together
+
+// add the waves together
 loop(POLYPHONY,
 	OnOff[i] >= 0 ? (
 		spl0 += Wave(i, current_time) * Envelopes[i];
