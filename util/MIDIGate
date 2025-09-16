@@ -1,0 +1,36 @@
+desc: MIDIGate
+tags: midi gate
+
+slider1:attack=0.05<0.01, 5, 0.01>Attack
+slider4:release=0.05<0.01, 5, 0.01>Release
+
+@init
+STEP = 1 / srate;
+
+notes_on = 0;
+envelope = 0;
+
+
+@block
+while(midirecv(offset, msg1, msg2, msg3)) (
+	isNoteMessage = (msg1 >= 0x80) & (msg1 < 0xA0); // check if the midi message is a note on/off message
+	isNoteMessage ? (
+		on = msg1 & 16;
+		
+		// if it is a note message, use it!
+		on ? (
+			notes_on += 1;
+		) : (
+			notes_on -= 1;
+		);
+	midisend(offset, msg1, msg2, msg3); // passthrough all messages
+);
+
+notes_on ? (
+	envelope < 1 ? (
+		envelope = min(1, envelope + (samplesblock * STEP/attack));
+	);
+) : (
+	envelope > 0 ? (
+		envelope = max(0, envelope - (samplesblock * STEP/release));
+	);
