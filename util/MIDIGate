@@ -2,16 +2,20 @@ desc: MIDIGate
 tags: midi gate
 
 slider1:attack=0.05<0.00, 5, 0.01>Attack
+slider2:decay=0.05<0.00, 5, 0.01>Decay
+slider3:sustain=1<0.00, 1, 0.01>Sustain
 slider4:release=0.05<0.00, 5, 0.01>Release
 
 @init
 STEP = 1 / srate;
 
 notes_on = 0;
+state = 0;
 envelope = 0;
 
 @slider
 immediateAttack = attack == 0;
+immediateDecay = decay == 0;
 immediateRelease = release == 0;
 
 
@@ -31,14 +35,30 @@ while(midirecv(offset, msg1, msg2, msg3)) (
 	midisend(offset, msg1, msg2, msg3); // passthrough all messages
 );
 
+notes_on == 0 ? state = 0;
+
 
 @sample
+s = state;
 notes_on ? (
-	envelope < 1 ? (
+	s == 0 ? (
 		immediateAttack ? (
 			envelope = 1;
 		) : (
 			envelope = min(1, envelope + (STEP/attack));
+		);
+		envelope >= 1 ? (
+			state = 1;
+		);
+	);
+	s == 1 ? (
+		immediateDecay ? (
+			envelope = sustain;
+		) : (
+			envelope = max(sustain, envelope - (STEP/decay));
+		);
+		envelope <= sustain ? (
+			state = 2;
 		);
 	);
 ) : (
